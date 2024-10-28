@@ -37,7 +37,7 @@ void setup() {
 
 void loop() {
   milisecTime = millis();
-  if(Firebase.ready() && signupOK && ((milisecTime - lastUpdateTime)/1000 >= secondsBetweenUpdates)){ //
+  if(Firebase.ready() && signupOK && ((milisecTime - lastUpdateTime) >= secondsBetweenUpdates * 1000)){ //
     int volumePercentage = measureVolumePercentage();
     sendDataToRtdb(volumePercentage);
     lastUpdateTime = milisecTime;
