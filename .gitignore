@@ -1,0 +1,3 @@
+# ignore Credentials file
+Credentials.h
+Credentials.hpp

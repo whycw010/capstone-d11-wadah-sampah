@@ -1,9 +1,10 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
+// WiFi and Firebase Credentials Header file
+#include "Credentials.h"
+
 // --- Firebase RTDB ---
-#define DATABASE_URL "URL"
-#define API_KEY "KEY"
 #include <Firebase_ESP_Client.h>
 //Provide the token generation process info.
 #include "addons/TokenHelper.h"
@@ -16,16 +17,18 @@ FirebaseConfig config;
 bool signupOK = false;
 // --- Firebase RTDB ---
 
-// WiFi info
-#define WIFI_SSID "SSID"
-#define WIFI_PASSWORD "PASSWORD"
 
 // ID unit pengambil sampah
 #define UNIT_ID "1"
 
 const int secondsBetweenUpdates = 60; // 1 hour for deployment
 unsigned long milisecTime = 0;
-unsigned long lastUpdateTime = 0;
+unsigned long lastUpdateTime = 3600 * 1000;
+// Volume measurement 
+const int pin_sensor[3][3] = {{18, 19, 21}, {27, 14, 22}, {13, 12, 23}};
+#define SENSOR_TO_GROUND_DIST 28 //cm
+#define CONTAINER_HEIGHT 20 //cm
+const int SENSOR_TO_TOP_OF_CONTAINER_DIST = SENSOR_TO_GROUND_DIST - CONTAINER_HEIGHT;
 
 void setup() {
     Serial.begin(115200);
@@ -51,10 +54,75 @@ void sendDataToRtdb(int volumePercentage){
 }
 
 int measureVolumePercentage(){
-  int percent = 75; // test
+  float totalSensorToObj = 0;
+  int workingSensors = 0;
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      float SensorToObj = measureSensor(i,j);
+      if (SensorToObj > 0 && SensorToObj < SENSOR_TO_GROUND_DIST+5){
+        totalSensorToObj = totalSensorToObj + SensorToObj;
+        workingSensors += 1;
+      }
+      Serial.print(String(SensorToObj, 2));
+      Serial.print(" cm");
+      if (j < 3) {
+        Serial.print(" | ");
+      }
+    }
+    Serial.println();
+  }
+  Serial.print("totalSensorToObj:");
+  Serial.println(totalSensorToObj);
+
+
+  float avgSensorToObj = totalSensorToObj/workingSensors;
+  Serial.print("avgSensorToObj:");
+  Serial.println(avgSensorToObj);
+
+  float avgObjectHeight = SENSOR_TO_GROUND_DIST - avgSensorToObj;
+  Serial.print("avgObjectHeight:");
+  Serial.println(avgObjectHeight);
+
+  int percent = avgObjectHeight/CONTAINER_HEIGHT * 100;
+  Serial.print("Volume: ");
+  Serial.println(percent);
+
   return percent;
 }
 
+float measureDistance(int sensorPin){
+  delay(100);
+  pinMode(sensorPin, OUTPUT);
+  
+  digitalWrite(sensorPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(sensorPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(sensorPin, LOW);
+
+  pinMode(sensorPin, INPUT);
+  int duration = pulseIn(sensorPin, HIGH);
+  return duration * 0.034 / 2;
+}
+
+float measureSensor(int i, int j) {
+  return measureDistance(pin_sensor[i][j]);
+}
+
+void printDistanceAll() {
+  Serial.println("Current Distance");
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      Serial.print(String(measureSensor(i,j), 2));
+      Serial.print(" cm");
+      if (j < 3) {
+        Serial.print(" | ");
+      }
+    }
+    Serial.println();
+  }
+}
 void setupRtdb(){
   /* Assign the api key (required) */
     config.api_key = API_KEY;
