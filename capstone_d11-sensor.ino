@@ -21,14 +21,21 @@ bool signupOK = false;
 // ID unit pengambil sampah
 #define UNIT_ID "1"
 
-const int secondsBetweenUpdates = 60; // 1 hour for deployment
+#define SECONDS_BETWEEN_SENSOR_READING 5 // 1 hour for deployment
+//#define SECONDS_BETWEEN_DB_UPDATE 30;
 unsigned long milisecTime = 0;
-unsigned long lastUpdateTime = 3600 * 1000;
+unsigned long lastSensorUpdateTime = 0;
+//unsigned long lastDBUpdateTime = 0;
+
+
 // Volume measurement 
 const int pin_sensor[3][3] = {{18, 19, 21}, {27, 14, 22}, {13, 12, 23}};
 #define SENSOR_TO_GROUND_DIST 28 //cm
 #define CONTAINER_HEIGHT 20 //cm
 const int SENSOR_TO_TOP_OF_CONTAINER_DIST = SENSOR_TO_GROUND_DIST - CONTAINER_HEIGHT;
+
+int lastVolumePercent[6];
+int LVPPointer = 0;
 
 void setup() {
     Serial.begin(115200);
@@ -40,11 +47,24 @@ void setup() {
 
 void loop() {
   milisecTime = millis();
-  if(Firebase.ready() && signupOK && ((milisecTime - lastUpdateTime) >= secondsBetweenUpdates * 1000)){ //
+  if((milisecTime - lastSensorUpdateTime) >= SECONDS_BETWEEN_SENSOR_READING * 1000){ //
     int volumePercentage = measureVolumePercentage();
-    sendDataToRtdb(volumePercentage);
-    lastUpdateTime = milisecTime;
+    lastVolumePercent[LVPPointer] = volumePercentage;
 
+    lastSensorUpdateTime = milisecTime;
+    LVPPointer = LVPPointer++;
+  }
+
+  if (LVPPointer == 6){
+      LVPPointer = 0;
+      if(Firebase.ready() && signupOK){
+        int volPercentTotal = 0;
+        for (int i=0;i<6;i++){
+            volPercentTotal += lastVolumePercent[i];
+        }
+        int volPercentAvg = volPercentTotal/6;
+        sendDataToRtdb(volPercentAvg);
+      }
   }
 }
 void sendDataToRtdb(int volumePercentage){
