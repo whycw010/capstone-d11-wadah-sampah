@@ -23,17 +23,19 @@ bool signupOK = false;
 
 #define SECONDS_BETWEEN_SENSOR_READING 2
 #define READINGS_BETWEEN_DB_UPDATE 5
+#define SECONDS_BETWEEN_HISTORY_UPDATE 60 
 
 //#define SECONDS_BETWEEN_DB_UPDATE 30;
 unsigned long milisecTime = 0;
 unsigned long lastSensorUpdateTime = 0;
+unsigned long lastHistoryUpdate = 0;
 //unsigned long lastDBUpdateTime = 0;
 
 
 // Volume measurement 
 const int pin_sensor[3][3] = {{18, 19, 21}, {27, 14, 22}, {13, 12, 23}};
-#define SENSOR_TO_GROUND_DIST 28 //cm
-#define CONTAINER_HEIGHT 20 //cm
+#define SENSOR_TO_GROUND_DIST 47 //cm
+#define CONTAINER_HEIGHT 25 //cm
 
 int lastVolumePercent[READINGS_BETWEEN_DB_UPDATE];
 int LVPPointer = 0;
@@ -64,17 +66,43 @@ void loop() {
             volPercentTotal += lastVolumePercent[i];
         }
         int volPercentAvg = volPercentTotal/READINGS_BETWEEN_DB_UPDATE;
-        Serial.print("volPercentAvg:");
-        Serial.println(volPercentAvg);
         sendDataToRtdb(volPercentAvg);
+
+        if((milisecTime - lastHistoryUpdate) >= SECONDS_BETWEEN_HISTORY_UPDATE * 1000){//update history
+          updateRtdbHistory(volPercentAvg);
+        }
       }
   }
+
 }
 void sendDataToRtdb(int volumePercentage){
-  Firebase.RTDB.setInt(&fbdo, "id/" UNIT_ID "/status/percentFilled", volumePercentage);   //
-  Firebase.RTDB.setInt(&fbdo, "id/" UNIT_ID "/status/timestamp", getEpochTime());  // TODO: send both data at once
-  return; //TODO: report if call successfull
+  if(Firebase.RTDB.setInt(&fbdo, "id/" UNIT_ID "/status/percentFilled", volumePercentage) &&
+     Firebase.RTDB.setInt(&fbdo, "id/" UNIT_ID "/status/timestamp", getEpochTime())){
+
+       Serial.print("DB updated:");
+       Serial.println(volumePercentage);
+  }
+   else{
+        Serial.println("Failed to update DB");
+    }
+
+  return;
 }
+
+void updateRtdbHistory(int volumePercentage){
+    String time = String(getEpochTime());
+    Serial.println("attempting to update history");
+    if(Firebase.RTDB.setInt(&fbdo, "id/" UNIT_ID "/history/" + time, volumePercentage)){
+        Serial.print("History updated:");
+        Serial.println(volumePercentage);
+    }
+    else{
+        Serial.println("Failed to update history");
+    }
+
+  return;
+}
+
 
 int measureVolumePercentage(){
   float totalSensorToObj = 0;
@@ -118,7 +146,7 @@ float measureDistance(int sensorPin){
   pinMode(sensorPin, OUTPUT);
   
   digitalWrite(sensorPin, LOW);
-  delayMicroseconds(2);
+  delayMicroseconds(5);
 
   digitalWrite(sensorPin, HIGH);
   delayMicroseconds(10);
@@ -133,19 +161,19 @@ float measureSensor(int i, int j) {
   return measureDistance(pin_sensor[i][j]);
 }
 
-void printDistanceAll() {
-  Serial.println("Current Distance");
-  for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
-      Serial.print(String(measureSensor(i,j), 2));
-      Serial.print(" cm");
-      if (j < 3) {
-        Serial.print(" | ");
-      }
-    }
-    Serial.println();
-  }
-}
+// void printDistanceAll() {
+//   Serial.println("Current Distance");
+//   for (int i = 0; i < 3; i++) {
+//     for (int j = 0; j < 3; j++) {
+//       Serial.print(String(measureSensor(i,j), 2));
+//       Serial.print(" cm");
+//       if (j < 3) {
+//         Serial.print(" | ");
+//       }
+//     }
+//     Serial.println();
+//   }
+// }
 void setupRtdb(){
   /* Assign the api key (required) */
     config.api_key = API_KEY;
